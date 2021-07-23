@@ -1,0 +1,14 @@
+amqp_host: data.cyverse.org
+amqp_port: 5672
+amqp_vhost: 
+amqp_queue:
+amqp_username:
+amqp_password:
+
+irods_host: data.cyverse.org
+irods_port: 1247
+irods_username: rods
+irods_password:
+irods_zone: iplant
+
+varnish_url: "http://127.0.0.1:6081/dav"
