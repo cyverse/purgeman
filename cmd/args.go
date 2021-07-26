@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"golang.org/x/term"
@@ -120,22 +119,24 @@ func processArguments() (*purgeman.Config, error, bool) {
 		}
 	}
 
-	if flag.NArg() == 0 {
-		flag.Usage()
-		return nil, nil, true
+	configFilePath := ""
+	if flag.NArg() > 0 {
+		configFilePath = flag.Arg(0)
 	}
-
-	if flag.NArg() != 1 {
-		flag.Usage()
-		err := fmt.Errorf("Illegal arguments given, required 1, but received %d (%s)", flag.NArg(), strings.Join(flag.Args(), " "))
-		logger.Error(err)
-		return nil, err, true
-	}
-
-	configFilePath := flag.Arg(0)
 
 	stdinClosed := false
-	if configFilePath == "-" {
+	if len(configFilePath) == 0 {
+		// read from Environmental variables
+		envConfig, err := purgeman.NewConfigFromENV()
+		if err != nil {
+			logger.WithError(err).Error("Could not read Environmental Variables")
+			return nil, err, true
+		}
+
+		envConfig.Foreground = config.Foreground
+		// overwrite
+		config = envConfig
+	} else if configFilePath == "-" {
 		// read from stdin
 		stdinReader := bufio.NewReader(os.Stdin)
 		yamlBytes, err := ioutil.ReadAll(stdinReader)

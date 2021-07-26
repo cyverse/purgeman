@@ -23,13 +23,11 @@ func NewPurgeman(config *Config) (*PurgemanService, error) {
 	}, nil
 }
 
-func (svc *PurgemanService) Start() error {
+func (svc *PurgemanService) Connect() error {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.Start",
+		"function": "PurgemanService.Connect",
 	})
-
-	logger.Info("Starting the purgeman service")
 
 	logger.Info("Connecting to iRODS")
 	iRODSAccount, err := irodsfs_clienttype.CreateIRODSAccount(svc.Config.IRODSHost, svc.Config.IRODSPort, svc.Config.IRODSUsername, svc.Config.IRODSZone, irodsfs_clienttype.AuthSchemeNative, svc.Config.IRODSPassword, "")
@@ -54,7 +52,7 @@ func (svc *PurgemanService) Start() error {
 		Host:     svc.Config.AMQPHost,
 		Port:     svc.Config.AMQPPort,
 		VHost:    svc.Config.AMQPVHost,
-		Queue:    svc.Config.AMQPQueue,
+		Exchange: svc.Config.AMQPExchange,
 	}
 
 	logger.Info("Connecting to iRODS Message Queue")
@@ -66,13 +64,23 @@ func (svc *PurgemanService) Start() error {
 	}
 
 	svc.MessageQueueConnection = mqConn
+	return nil
+}
+
+func (svc *PurgemanService) Start() error {
+	logger := log.WithFields(log.Fields{
+		"package":  "purgeman",
+		"function": "PurgemanService.Start",
+	})
+
+	logger.Info("Starting the purgeman service")
 
 	// should not return
-	err = mqConn.MonitorFSChanges(svc.fsEventHandler)
+	err := svc.MessageQueueConnection.MonitorFSChanges(svc.fsEventHandler)
 	if err != nil {
 		logger.Error(err)
-		defer mqConn.Disconnect()
-		defer fsclient.Release()
+		defer svc.MessageQueueConnection.Disconnect()
+		defer svc.IRODSClient.Release()
 		return err
 	}
 
@@ -139,20 +147,20 @@ func (svc *PurgemanService) purgeCache(path string) {
 	})
 
 	// purge cache on the path
-	logger.Info("Purging a cache for %s", path)
+	logger.Infof("Purging a cache for %s", path)
 
-	urlPrefix := svc.Config.VarnishURLPrefix
-	if !strings.HasSuffix(urlPrefix, "/") {
-		urlPrefix = svc.Config.VarnishURLPrefix + "/"
-	}
-
+	urlPrefix := strings.TrimRight(svc.Config.VarnishURLPrefix, "/")
 	requestURL := urlPrefix + path
+
+	logger.Infof("Sending a PURGE request to %s", requestURL)
 
 	req, err := http.NewRequest("PURGE", requestURL, nil)
 	if err != nil {
 		logger.WithError(err).Errorf("Failed to create a PURGE request for url %s", requestURL)
 		return
 	}
+
+	req.SetBasicAuth(svc.Config.IRODSUsername, svc.Config.IRODSPassword)
 
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -161,7 +169,9 @@ func (svc *PurgemanService) purgeCache(path string) {
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		logger.WithError(err).Errorf("Unexpected response for a PURGE request to url %s - %s", requestURL, response.Status)
+		logger.Errorf("Unexpected response for a PURGE request to url %s - %s", requestURL, response.Status)
 		return
 	}
+
+	logger.Infof("Request is accepted!")
 }

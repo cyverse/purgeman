@@ -252,6 +252,15 @@ func run(config *purgeman.Config, isChildProcess bool) error {
 		return err
 	}
 
+	err = svc.Connect()
+	if err != nil {
+		logger.WithError(err).Error("Could not connect the service")
+		if isChildProcess {
+			fmt.Fprintln(os.Stderr, InterProcessCommunicationFinishError)
+		}
+		return err
+	}
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT)
 

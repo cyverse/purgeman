@@ -16,7 +16,8 @@ type IRODSMessageQueueConfig struct {
 	Host     string
 	Port     int
 	VHost    string
-	Queue    string
+	Exchange string // can be empty
+	Queue    string // can be empty
 }
 
 // IRODSMessageQueueConnection is a connection object for iRODS message queue
@@ -69,6 +70,26 @@ func (conn *IRODSMessageQueueConnection) MonitorFSChanges(handler FSEventHandler
 		"package":  "purgeman",
 		"function": "IRODSMessageQueueConnection.MonitorFSChanges",
 	})
+
+	if len(conn.Config.Queue) == 0 && len(conn.Config.Exchange) > 0 {
+		// create a queue
+		// auto generate name
+		queue, err := conn.AMQPChannel.QueueDeclare("", false, true, false, false, amqp.Table{})
+		if err != nil {
+			logger.WithError(err).Errorf("Could not declare a queue")
+			return err
+		}
+
+		err = conn.AMQPChannel.QueueBind(queue.Name, "#", conn.Config.Exchange, false, amqp.Table{})
+		if err != nil {
+			logger.WithError(err).Errorf("Could not bind the queue")
+			return err
+		}
+
+		conn.Config.Queue = queue.Name
+	} else if len(conn.Config.Queue) == 0 && len(conn.Config.Exchange) == 0 {
+		return fmt.Errorf("no queue or exchange given")
+	}
 
 	for conn.StartMonitor {
 		msgs, err := conn.AMQPChannel.Consume(
@@ -139,7 +160,7 @@ func (conn *IRODSMessageQueueConnection) handleFSEvents(msg amqp.Delivery, handl
 	body := map[string]interface{}{}
 	err := json.Unmarshal(msg.Body, &body)
 	if err != nil {
-		logger.WithError(err).Error("Failed to parse message body")
+		logger.WithError(err).Errorf("Failed to parse message body - %s : %v", msg.RoutingKey, string(msg.Body))
 		return
 	}
 

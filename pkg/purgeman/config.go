@@ -3,6 +3,7 @@ package purgeman
 import (
 	"fmt"
 
+	"github.com/kelseyhightower/envconfig"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -14,22 +15,23 @@ const (
 
 // Config holds the parameters list which can be configured
 type Config struct {
-	AMQPHost     string `yaml:"amqp_host"`
-	AMQPPort     int    `yaml:"amqp_port"`
-	AMQPVHost    string `yaml:"amqp_vhost"`
-	AMQPQueue    string `yaml:"amqp_queue"`
-	AMQPUsername string `yaml:"amqp_username,omitempty"`
-	AMQPPassword string `yaml:"amqp_password,omitempty"`
+	AMQPHost     string `envconfig:"PURGEMAN_AMQP_HOST" yaml:"amqp_host"`
+	AMQPPort     int    `envconfig:"PURGEMAN_AMQP_PORT" yaml:"amqp_port"`
+	AMQPVHost    string `envconfig:"PURGEMAN_AMQP_VHOST" yaml:"amqp_vhost"`
+	AMQPExchange string `envconfig:"PURGEMAN_AMQP_EXCHANGE" yaml:"amqp_exchange"`
+	AMQPQueue    string `envconfig:"PURGEMAN_AMQP_QUEUE" yaml:"amqp_queue"`
+	AMQPUsername string `envconfig:"PURGEMAN_AMQP_USERNAME" yaml:"amqp_username,omitempty"`
+	AMQPPassword string `envconfig:"PURGEMAN_AMQP_PASSWORD" yaml:"amqp_password,omitempty"`
 
-	IRODSHost     string `yaml:"irods_host"`
-	IRODSPort     int    `yaml:"irods_port"`
-	IRODSUsername string `yaml:"irods_username,omitempty"`
-	IRODSPassword string `yaml:"irods_password,omitempty"`
-	IRODSZone     string `yaml:"irods_zone"`
+	IRODSHost     string `envconfig:"PURGEMAN_IRODS_HOST" yaml:"irods_host"`
+	IRODSPort     int    `envconfig:"PURGEMAN_IRODS_PORT" yaml:"irods_port"`
+	IRODSUsername string `envconfig:"PURGEMAN_IRODS_USERNAME" yaml:"irods_username,omitempty"`
+	IRODSPassword string `envconfig:"PURGEMAN_IRODS_PASSWORD" yaml:"irods_password,omitempty"`
+	IRODSZone     string `envconfig:"PURGEMAN_IRODS_ZONE" yaml:"irods_zone"`
 
-	VarnishURLPrefix string `yaml:"varnish_url"`
+	VarnishURLPrefix string `envconfig:"PURGEMAN_VARNISH_URL" yaml:"varnish_url"`
 
-	LogPath string `yaml:"log_path,omitempty"`
+	LogPath string `envconfig:"PURGEMAN_LOG_PATH" yaml:"log_path,omitempty"`
 
 	Foreground   bool `yaml:"foreground,omitempty"`
 	ChildProcess bool `yaml:"childprocess,omitempty"`
@@ -51,10 +53,32 @@ func NewDefaultConfig() *Config {
 	}
 }
 
+// NewConfigFromENV creates Config from Environmental Variables
+func NewConfigFromENV() (*Config, error) {
+	config := Config{
+		AMQPPort: AMQPPortDefault,
+
+		IRODSPort: IRODSPortDefault,
+
+		VarnishURLPrefix: VarnishURLPrefixDefault,
+	}
+
+	err := envconfig.Process("", &config)
+	if err != nil {
+		return nil, fmt.Errorf("Env Read Error - %v", err)
+	}
+
+	return &config, nil
+}
+
 // NewConfigFromYAML creates Config from YAML
 func NewConfigFromYAML(yamlBytes []byte) (*Config, error) {
 	config := Config{
 		AMQPPort: AMQPPortDefault,
+
+		IRODSPort: IRODSPortDefault,
+
+		VarnishURLPrefix: VarnishURLPrefixDefault,
 	}
 
 	err := yaml.Unmarshal(yamlBytes, &config)
@@ -79,8 +103,8 @@ func (config *Config) Validate() error {
 		return fmt.Errorf("AMQP vhost must be given")
 	}
 
-	if len(config.AMQPQueue) == 0 {
-		return fmt.Errorf("AMQP queue must be given")
+	if len(config.AMQPExchange) == 0 && len(config.AMQPQueue) == 0 {
+		return fmt.Errorf("either AMQP exchange or AMQP Queue must be given")
 	}
 
 	if len(config.AMQPUsername) == 0 {
