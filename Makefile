@@ -14,7 +14,7 @@ build:
 install_centos:
 	cp bin/purgeman /usr/bin
 	cp install/purgeman.service /usr/lib/systemd/system/
-	adduser -r -d /dev/null -s /sbin/nologin purgeman
+	id -u purgeman &> /dev/null || adduser -r -d /dev/null -s /sbin/nologin purgeman
 	mkdir -p /etc/purgeman
 	cp install/purgeman.conf /etc/purgeman
 	chown purgeman /etc/purgeman/purgeman.conf
@@ -24,7 +24,7 @@ install_centos:
 install_ubuntu:
 	cp bin/purgeman /usr/bin
 	cp install/purgeman.service /etc/systemd/system/
-	adduser --system --home /dev/null --shell /sbin/nologin purgeman
+	id -u purgeman &> /dev/null || adduser --system --home /dev/null --shell /sbin/nologin purgeman
 	mkdir -p /etc/purgeman
 	cp install/purgeman.conf /etc/purgeman
 	chown purgeman /etc/purgeman/purgeman.conf
