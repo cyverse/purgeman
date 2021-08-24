@@ -1,27 +1,3 @@
-PKG=github.com/cyverse/purgeman
-GO111MODULE=on
-GOPROXY=direct
-GOPATH=$(shell go env GOPATH)
-
-.EXPORT_ALL_VARIABLES:
-
-.PHONY: build
-build:
-	mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux go build -o bin/purgeman ./cmd/
-
-.PHONY: release
-release: build
-	mkdir -p release
-	mkdir -p release/bin
-	cp bin/purgeman release/bin
-	mkdir -p release/install
-	cp install/purgeman.conf release/install
-	cp install/purgeman.service release/install
-	cp install/README.md release/install
-	cp Makefile.release release/Makefile
-	cd release && tar zcvf ../purgeman.tar.gz *
-
 .PHONY: install_centos
 install_centos:
 	cp bin/purgeman /usr/bin
