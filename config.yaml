@@ -11,4 +11,5 @@ irods_username:
 irods_password:
 irods_zone: cyverse.dev
 
-varnish_url: "https://data-dev.cyverse.rocks/dav"
+varnish_urls:
+  - "https://data-dev.cyverse.rocks/dav"

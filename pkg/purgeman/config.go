@@ -29,7 +29,7 @@ type Config struct {
 	IRODSPassword string `envconfig:"PURGEMAN_IRODS_PASSWORD" yaml:"irods_password,omitempty"`
 	IRODSZone     string `envconfig:"PURGEMAN_IRODS_ZONE" yaml:"irods_zone"`
 
-	VarnishURLPrefix string `envconfig:"PURGEMAN_VARNISH_URL" yaml:"varnish_url"`
+	VarnishURLPrefixes []string `envconfig:"PURGEMAN_VARNISH_URLS" yaml:"varnish_urls"`
 
 	LogPath string `envconfig:"PURGEMAN_LOG_PATH" yaml:"log_path,omitempty"`
 
@@ -44,7 +44,9 @@ func NewDefaultConfig() *Config {
 
 		IRODSPort: IRODSPortDefault,
 
-		VarnishURLPrefix: VarnishURLPrefixDefault,
+		VarnishURLPrefixes: []string{
+			VarnishURLPrefixDefault,
+		},
 
 		LogPath: "",
 
@@ -60,7 +62,9 @@ func NewConfigFromENV() (*Config, error) {
 
 		IRODSPort: IRODSPortDefault,
 
-		VarnishURLPrefix: VarnishURLPrefixDefault,
+		VarnishURLPrefixes: []string{
+			VarnishURLPrefixDefault,
+		},
 	}
 
 	err := envconfig.Process("", &config)
@@ -78,7 +82,9 @@ func NewConfigFromYAML(yamlBytes []byte) (*Config, error) {
 
 		IRODSPort: IRODSPortDefault,
 
-		VarnishURLPrefix: VarnishURLPrefixDefault,
+		VarnishURLPrefixes: []string{
+			VarnishURLPrefixDefault,
+		},
 	}
 
 	err := yaml.Unmarshal(yamlBytes, &config)
@@ -135,7 +141,7 @@ func (config *Config) Validate() error {
 		return fmt.Errorf("IRODS zone must be given")
 	}
 
-	if len(config.VarnishURLPrefix) == 0 {
+	if len(config.VarnishURLPrefixes) == 0 {
 		return fmt.Errorf("Varnish URL Prefix is not given")
 	}
 
