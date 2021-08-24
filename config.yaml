@@ -13,3 +13,4 @@ irods_zone: cyverse.dev
 
 varnish_urls:
   - "https://data-dev.cyverse.rocks/dav"
+  - "https://data-dev.cyverse.rocks/dav-anon"

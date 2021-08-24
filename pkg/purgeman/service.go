@@ -3,6 +3,7 @@ package purgeman
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	irodsfs_client "github.com/cyverse/go-irodsclient/fs"
 	irodsfs_clienttype "github.com/cyverse/go-irodsclient/irods/types"
@@ -149,31 +150,42 @@ func (svc *PurgemanService) purgeCache(path string) {
 	// purge cache on the path
 	logger.Infof("Purging a cache for %s", path)
 
+	wg := sync.WaitGroup{}
 	for _, varnishURL := range svc.Config.VarnishURLPrefixes {
-		urlPrefix := strings.TrimRight(varnishURL, "/")
-		requestURL := urlPrefix + path
+		wg.Add(1)
 
-		logger.Infof("Sending a PURGE request to %s", requestURL)
+		f := func(urlPrefix string) {
+			defer wg.Done()
 
-		req, err := http.NewRequest("PURGE", requestURL, nil)
-		if err != nil {
-			logger.WithError(err).Errorf("Failed to create a PURGE request for url %s", requestURL)
-			continue
+			urlPrefix = strings.TrimRight(urlPrefix, "/")
+			requestURL := urlPrefix + path
+
+			logger.Infof("Sending a PURGE request to %s", requestURL)
+
+			req, err := http.NewRequest("PURGE", requestURL, nil)
+			if err != nil {
+				logger.WithError(err).Errorf("Failed to create a PURGE request for url %s", requestURL)
+				return
+			}
+
+			req.SetBasicAuth(svc.Config.IRODSUsername, svc.Config.IRODSPassword)
+
+			response, err := http.DefaultClient.Do(req)
+			if err != nil {
+				logger.WithError(err).Errorf("Failed to make a PURGE request to url %s", requestURL)
+				return
+			}
+
+			if response.StatusCode < 200 || response.StatusCode >= 300 {
+				logger.Errorf("Unexpected response for a PURGE request to url %s - %s", requestURL, response.Status)
+				return
+			}
+
+			logger.Infof("Request is accepted!")
 		}
 
-		req.SetBasicAuth(svc.Config.IRODSUsername, svc.Config.IRODSPassword)
-
-		response, err := http.DefaultClient.Do(req)
-		if err != nil {
-			logger.WithError(err).Errorf("Failed to make a PURGE request to url %s", requestURL)
-			continue
-		}
-
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			logger.Errorf("Unexpected response for a PURGE request to url %s - %s", requestURL, response.Status)
-			continue
-		}
-
-		logger.Infof("Request is accepted!")
+		go f(varnishURL)
 	}
+
+	wg.Wait()
 }
