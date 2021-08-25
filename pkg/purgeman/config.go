@@ -29,7 +29,8 @@ type Config struct {
 	IRODSPassword string `envconfig:"PURGEMAN_IRODS_PASSWORD" yaml:"irods_password,omitempty"`
 	IRODSZone     string `envconfig:"PURGEMAN_IRODS_ZONE" yaml:"irods_zone"`
 
-	VarnishURLPrefixes []string `envconfig:"PURGEMAN_VARNISH_URLS" yaml:"varnish_urls"`
+	VarnishHostsOverride []string `envconfig:"PURGEMAN_VARNISH_HOSTS_OVERRIDE" yaml:"varnish_hosts_override"`
+	VarnishURLPrefixes   []string `envconfig:"PURGEMAN_VARNISH_URLS" yaml:"varnish_urls"`
 
 	LogPath string `envconfig:"PURGEMAN_LOG_PATH" yaml:"log_path,omitempty"`
 
@@ -44,6 +45,9 @@ func NewDefaultConfig() *Config {
 
 		IRODSPort: IRODSPortDefault,
 
+		VarnishHostsOverride: []string{
+			"",
+		},
 		VarnishURLPrefixes: []string{
 			VarnishURLPrefixDefault,
 		},
@@ -62,6 +66,9 @@ func NewConfigFromENV() (*Config, error) {
 
 		IRODSPort: IRODSPortDefault,
 
+		VarnishHostsOverride: []string{
+			"",
+		},
 		VarnishURLPrefixes: []string{
 			VarnishURLPrefixDefault,
 		},
@@ -82,6 +89,9 @@ func NewConfigFromYAML(yamlBytes []byte) (*Config, error) {
 
 		IRODSPort: IRODSPortDefault,
 
+		VarnishHostsOverride: []string{
+			"",
+		},
 		VarnishURLPrefixes: []string{
 			VarnishURLPrefixDefault,
 		},

@@ -16,3 +16,7 @@
 
 # Config files
 config/**
+# Release files
+release/**
+# Bin files
+bin/**
