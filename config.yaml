@@ -11,9 +11,6 @@ irods_username:
 irods_password:
 irods_zone: cyverse.dev
 
-varnish_hosts_override:
-  - data-dev.cyverse.rocks
-  - data-dev.cyverse.rocks
 varnish_urls:
-  - "http://localhost/dav"
-  - "http://localhost/dav-anon"
+  - "http://127.0.0.1:6081/dav"
+  - "http://127.0.0.1:6081/dav-anon"
