@@ -3,7 +3,7 @@ module github.com/cyverse/purgeman
 go 1.14
 
 require (
-	github.com/cyverse/go-irodsclient v0.4.5
+	github.com/cyverse/go-irodsclient v0.5.5
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/streadway/amqp v1.0.0
