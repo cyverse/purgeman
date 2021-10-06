@@ -1,4 +1,8 @@
 PKG=github.com/cyverse/purgeman
+VERSION=v0.3.0
+GIT_COMMIT?=$(shell git rev-parse HEAD)
+BUILD_DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS?="-X '${PKG}/pkg/commons.serviceVersion=${VERSION}' -X '${PKG}/pkg/commons.gitCommit=${GIT_COMMIT}' -X '${PKG}/pkg/commons.buildDate=${BUILD_DATE}'"
 GO111MODULE=on
 GOPROXY=direct
 GOPATH=$(shell go env GOPATH)
@@ -8,7 +12,7 @@ GOPATH=$(shell go env GOPATH)
 .PHONY: build
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux go build -o bin/purgeman ./cmd/
+	CGO_ENABLED=0 GOOS=linux go build -ldflags=${LDFLAGS} -o bin/purgeman ./cmd/
 
 .PHONY: release
 release: build
