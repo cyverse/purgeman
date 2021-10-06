@@ -223,6 +223,7 @@ func (svc *PurgemanService) fetchIRODSPath(uuid string) string {
 		return ""
 	}
 
+	logger.Infof("fetching iRODS Path from UUID %s", uuid)
 	entries, err := svc.IRODSClient.SearchByMeta("ipc_UUID", uuid)
 	if err == nil {
 		// only one entry must be found

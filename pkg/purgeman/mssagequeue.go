@@ -68,7 +68,8 @@ func ConnectIRODSMessageQueue(config *IRODSMessageQueueConfig) (*IRODSMessageQue
 func (conn *IRODSMessageQueueConnection) MonitorFSChanges(handler FSEventHandler) error {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "IRODSMessageQueueConnection.MonitorFSChanges",
+		"struct":   "IRODSMessageQueueConnection",
+		"function": "MonitorFSChanges",
 	})
 
 	if len(conn.Config.Queue) == 0 && len(conn.Config.Exchange) > 0 {
@@ -136,12 +137,21 @@ func (conn *IRODSMessageQueueConnection) Disconnect() {
 }
 
 func (conn *IRODSMessageQueueConnection) acceptFSEvents(msg amqp.Delivery) bool {
+	logger := log.WithFields(log.Fields{
+		"package":  "purgeman",
+		"struct":   "IRODSMessageQueueConnection",
+		"function": "handleFSEvents",
+	})
+
 	switch msg.RoutingKey {
 	case "data-object.add", "data-object.mod", "data-object.mv", "data-object.rm":
+		return true
+	case "data-object.sys-metadata.mod":
 		return true
 	case "collection.add", "collection.mv", "collection.rm":
 		return true
 	default:
+		logger.Infof("ignoring unknown message key - %s", msg.RoutingKey)
 		return false
 	}
 }
@@ -149,7 +159,8 @@ func (conn *IRODSMessageQueueConnection) acceptFSEvents(msg amqp.Delivery) bool 
 func (conn *IRODSMessageQueueConnection) handleFSEvents(msg amqp.Delivery, handler FSEventHandler) {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "IRODSMessageQueueConnection.handleFSEvents",
+		"struct":   "IRODSMessageQueueConnection",
+		"function": "handleFSEvents",
 	})
 
 	if strings.Contains(string(msg.Body), "\r") {
@@ -175,7 +186,7 @@ func (conn *IRODSMessageQueueConnection) handleFSEvents(msg amqp.Delivery, handl
 	case "collection.mv":
 		handler(msg.RoutingKey, body["old-path"].(string), body["entity"].(string))
 		handler(msg.RoutingKey, body["new-path"].(string), body["entity"].(string))
-	case "data-object.mod":
+	case "data-object.mod", "data-object.sys-metadata.mod":
 		// does not have path
 		handler(msg.RoutingKey, "", body["entity"].(string))
 	default:
