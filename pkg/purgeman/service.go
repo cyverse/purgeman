@@ -3,6 +3,7 @@ package purgeman
 import (
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -253,9 +254,54 @@ func (svc *PurgemanService) fsEventHandler(eventtype string, path string, uuid s
 
 	if len(iRODSPath) > 0 {
 		logger.Infof("Reveiced a %s event on file %s", eventtype, iRODSPath)
-		svc.purgeCache(iRODSPath)
+
+		switch eventtype {
+		case "data-object.add":
+			// It should purge the parent collection’s path.
+			svc.purgeCacheParent(iRODSPath)
+		case "data-object.rm":
+			// It should purge data object’s path and parent collection’s path.
+			svc.purgeCacheParentAndMe(iRODSPath)
+		case "data-object.mv":
+			// It should purge the data object's old path,
+			// and if the object was moved to a new parent collection,
+			// it should purge the old parent collection’s path.
+			svc.purgeCacheParentAndMe(iRODSPath)
+		case "collection.add":
+			// It should purge the parent collection’s path.
+			svc.purgeCacheParent(iRODSPath)
+		case "collection.rm":
+			// It should purge data object’s path and parent collection’s path.
+			svc.purgeCacheParentAndMe(iRODSPath)
+		case "collection.mv":
+			// It should purge the collection's old path,
+			// and if the collection was moved to a new parent collection,
+			// purge the old parent collection’s path
+			svc.purgeCacheParentAndMe(iRODSPath)
+		case "data-object.mod":
+			// It should purge the data object’s path.
+			// but also the parent collection to renew new file size of data object
+			svc.purgeCacheParentAndMe(iRODSPath)
+		case "data-object.sys-metadata.mod":
+			// It should purge the data object’s path.
+			svc.purgeCacheParentAndMe(iRODSPath)
+		default:
+			logger.Infof("Reveiced an unknown event %s", eventtype)
+		}
 	} else {
 		logger.Infof("Reveiced a %s event on file UUID %s, but could not resolve", eventtype, uuid)
+	}
+}
+
+func (svc *PurgemanService) purgeCacheParentAndMe(path string) {
+	svc.purgeCacheParent(path)
+	svc.purgeCache(path)
+}
+
+func (svc *PurgemanService) purgeCacheParent(path string) {
+	if len(path) > 0 && path != "/" {
+		dirpath := filepath.Dir(path)
+		svc.purgeCache(dirpath)
 	}
 }
 
