@@ -5,87 +5,170 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
-	irodsfs_client "github.com/cyverse/go-irodsclient/fs"
+	irodsfs_clientfs "github.com/cyverse/go-irodsclient/fs"
 	irodsfs_clienttype "github.com/cyverse/go-irodsclient/irods/types"
+	"github.com/cyverse/purgeman/pkg/commons"
 	log "github.com/sirupsen/logrus"
 )
 
 // PurgemanService is a service object
 type PurgemanService struct {
-	Config                 *Config
-	IRODSClient            *irodsfs_client.FileSystem
+	Config                 *commons.Config
+	IRODSClient            *irodsfs_clientfs.FileSystem
 	MessageQueueConnection *IRODSMessageQueueConnection
+	Terminate              bool
+	Mutex                  sync.Mutex
 }
 
 // NewPurgeman creates a new purgeman service
-func NewPurgeman(config *Config) (*PurgemanService, error) {
+func NewPurgeman(config *commons.Config) (*PurgemanService, error) {
 	return &PurgemanService{
 		Config: config,
 	}, nil
 }
 
-func (svc *PurgemanService) Connect() error {
+func (svc *PurgemanService) connectIRODS() error {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.Connect",
+		"struct":   "PurgemanService",
+		"function": "connectIRODS",
 	})
 
-	logger.Info("Connecting to iRODS")
-	iRODSAccount, err := irodsfs_clienttype.CreateIRODSAccount(svc.Config.IRODSHost, svc.Config.IRODSPort, svc.Config.IRODSUsername, svc.Config.IRODSZone, irodsfs_clienttype.AuthSchemeNative, svc.Config.IRODSPassword, "")
-	if err != nil {
-		logger.WithError(err).Error("Failed to create an iRODSAccount")
-		return err
+	svc.Mutex.Lock()
+	defer svc.Mutex.Unlock()
+
+	if svc.IRODSClient == nil {
+		logger.Info("Connecting to iRODS")
+		iRODSAccount, err := irodsfs_clienttype.CreateIRODSAccount(svc.Config.IRODSHost, svc.Config.IRODSPort, svc.Config.IRODSUsername, svc.Config.IRODSZone, irodsfs_clienttype.AuthSchemeNative, svc.Config.IRODSPassword, "")
+		if err != nil {
+			logger.WithError(err).Error("Failed to create an iRODSAccount")
+			return err
+		}
+
+		// connect to iRODS
+		fsclient, err := irodsfs_clientfs.NewFileSystemWithDefault(iRODSAccount, "purgeman")
+		if err != nil {
+			log.WithError(err).Errorf("Error connecting to iRODS")
+			return err
+		}
+
+		svc.IRODSClient = fsclient
 	}
+	return nil
+}
 
-	// connect to iRODS
-	fsclient, err := irodsfs_client.NewFileSystemWithDefault(iRODSAccount, "purgeman")
-	if err != nil {
-		log.WithError(err).Errorf("Error connecting to iRODS")
-		return err
+func (svc *PurgemanService) connectMessageQueue() error {
+	logger := log.WithFields(log.Fields{
+		"package":  "purgeman",
+		"struct":   "PurgemanService",
+		"function": "connectMessageQueue",
+	})
+
+	svc.Mutex.Lock()
+	defer svc.Mutex.Unlock()
+
+	if svc.MessageQueueConnection == nil {
+		logger.Info("Connecting to iRODS Message Queue")
+
+		mqConfig := IRODSMessageQueueConfig{
+			Username: svc.Config.AMQPUsername,
+			Password: svc.Config.AMQPPassword,
+			Host:     svc.Config.AMQPHost,
+			Port:     svc.Config.AMQPPort,
+			VHost:    svc.Config.AMQPVHost,
+			Exchange: svc.Config.AMQPExchange,
+		}
+
+		// connect to AMQP
+		mqConn, err := ConnectIRODSMessageQueue(&mqConfig)
+		if err != nil {
+			logger.WithError(err).Error("Failed to connect to an iRODS Message Queue")
+			return err
+		}
+
+		svc.MessageQueueConnection = mqConn
 	}
-
-	svc.IRODSClient = fsclient
-
-	// connect to AMQP
-	mqConfig := IRODSMessageQueueConfig{
-		Username: svc.Config.AMQPUsername,
-		Password: svc.Config.AMQPPassword,
-		Host:     svc.Config.AMQPHost,
-		Port:     svc.Config.AMQPPort,
-		VHost:    svc.Config.AMQPVHost,
-		Exchange: svc.Config.AMQPExchange,
-	}
-
-	logger.Info("Connecting to iRODS Message Queue")
-	mqConn, err := ConnectIRODSMessageQueue(&mqConfig)
-	if err != nil {
-		logger.WithError(err).Error("Failed to connect to an iRODS Message Queue")
-		defer fsclient.Release()
-		return err
-	}
-
-	svc.MessageQueueConnection = mqConn
 	return nil
 }
 
 func (svc *PurgemanService) Start() error {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.Start",
+		"struct":   "PurgemanService",
+		"function": "Start",
 	})
 
 	logger.Info("Starting the purgeman service")
+	wg := sync.WaitGroup{}
 
-	// should not return
-	err := svc.MessageQueueConnection.MonitorFSChanges(svc.fsEventHandler)
-	if err != nil {
-		logger.Error(err)
-		defer svc.MessageQueueConnection.Disconnect()
-		defer svc.IRODSClient.Release()
-		return err
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
+		for {
+			svc.Mutex.Lock()
+			if svc.Terminate {
+				svc.Mutex.Unlock()
+				return
+			}
+			svc.Mutex.Unlock()
+
+			err := svc.connectIRODS()
+			if err == nil {
+				// now connected to iRODS.
+				// if disconnected for any reason, iRODS session manage will handle it
+				return
+			}
+
+			logger.WithError(err).Error("Failed to connect to iRODS, retry after 1 min")
+			time.Sleep(1 * time.Minute)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			svc.Mutex.Lock()
+			if svc.Terminate {
+				svc.Mutex.Unlock()
+				return
+			}
+			svc.Mutex.Unlock()
+
+			err := svc.connectMessageQueue()
+			if err == nil {
+				// connected
+				// will not return until it fails to receive messages
+				err = svc.MessageQueueConnection.MonitorFSChanges(svc.fsEventHandler)
+				if err != nil {
+					logger.Error(err)
+				}
+
+				// reconnect?
+				svc.Mutex.Lock()
+				svc.MessageQueueConnection.Disconnect()
+				svc.MessageQueueConnection = nil
+
+				// is the failure due to termination?
+				if svc.Terminate {
+					svc.Mutex.Unlock()
+					return
+				}
+
+				svc.Mutex.Unlock()
+				// fall below for retry
+			}
+
+			logger.WithError(err).Error("Failed to connect to MessageQueue, retry after 1 min")
+			time.Sleep(1 * time.Minute)
+		}
+	}()
+
+	wg.Wait()
 	return nil
 }
 
@@ -93,8 +176,19 @@ func (svc *PurgemanService) Start() error {
 func (svc *PurgemanService) Destroy() {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.Destroy",
+		"struct":   "PurgemanService",
+		"function": "Destroy",
 	})
+
+	svc.Mutex.Lock()
+	defer svc.Mutex.Unlock()
+
+	if svc.Terminate {
+		// already terminated
+		return
+	}
+
+	svc.Terminate = true
 
 	logger.Info("Destroying the purgeman service")
 
@@ -111,6 +205,24 @@ func (svc *PurgemanService) Destroy() {
 
 // fetchIRODSPath returns path from uuid
 func (svc *PurgemanService) fetchIRODSPath(uuid string) string {
+	logger := log.WithFields(log.Fields{
+		"package":  "purgeman",
+		"struct":   "PurgemanService",
+		"function": "fetchIRODSPath",
+	})
+
+	svc.Mutex.Lock()
+	defer svc.Mutex.Unlock()
+
+	if svc.Terminate {
+		return ""
+	}
+
+	if svc.IRODSClient == nil {
+		logger.Errorf("Failed to connect to iRODS")
+		return ""
+	}
+
 	entries, err := svc.IRODSClient.SearchByMeta("ipc_UUID", uuid)
 	if err == nil {
 		// only one entry must be found
@@ -128,7 +240,8 @@ func (svc *PurgemanService) fetchIRODSPath(uuid string) string {
 func (svc *PurgemanService) fsEventHandler(eventtype string, path string, uuid string) {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.fsEventHandler",
+		"struct":   "PurgemanService",
+		"function": "fsEventHandler",
 	})
 
 	iRODSPath := path
@@ -137,15 +250,20 @@ func (svc *PurgemanService) fsEventHandler(eventtype string, path string, uuid s
 		iRODSPath = svc.fetchIRODSPath(uuid)
 	}
 
-	logger.Infof("Reveiced a %s event on file %s", eventtype, iRODSPath)
-	svc.purgeCache(iRODSPath)
+	if len(iRODSPath) > 0 {
+		logger.Infof("Reveiced a %s event on file %s", eventtype, iRODSPath)
+		svc.purgeCache(iRODSPath)
+	} else {
+		logger.Infof("Reveiced a %s event on file UUID %s, but could not resolve", eventtype, uuid)
+	}
 }
 
 // purgeCache purges cache
 func (svc *PurgemanService) purgeCache(path string) {
 	logger := log.WithFields(log.Fields{
 		"package":  "purgeman",
-		"function": "PurgemanService.purgeCache",
+		"struct":   "PurgemanService",
+		"function": "purgeCache",
 	})
 
 	// purge cache on the path
@@ -203,8 +321,6 @@ func (svc *PurgemanService) purgeCache(path string) {
 				logger.Errorf("Unexpected response for a PURGE request to url '%s' for host '%s' - %s", requestURL, host, response.Status)
 				return
 			}
-
-			logger.Infof("Request is accepted!")
 		}
 
 		go f(varnishURL)

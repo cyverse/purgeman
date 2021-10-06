@@ -1,4 +1,4 @@
-package purgeman
+package commons
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ const (
 	AMQPPortDefault         int    = 5672
 	IRODSPortDefault        int    = 1247
 	VarnishURLPrefixDefault string = "http://127.0.0.1:6081/"
+	LogFilePathDefault      string = "/tmp/purgeman.log"
 )
 
 // Config holds the parameters list which can be configured
@@ -41,10 +42,8 @@ type Config struct {
 // NewDefaultConfig creates DefaultConfig
 func NewDefaultConfig() *Config {
 	return &Config{
-		AMQPPort: AMQPPortDefault,
-
+		AMQPPort:  AMQPPortDefault,
 		IRODSPort: IRODSPortDefault,
-
 		VarnishHostsOverride: []string{
 			"",
 		},
@@ -52,7 +51,7 @@ func NewDefaultConfig() *Config {
 			VarnishURLPrefixDefault,
 		},
 
-		LogPath: "",
+		LogPath: LogFilePathDefault,
 
 		Foreground:   false,
 		ChildProcess: false,
@@ -62,16 +61,19 @@ func NewDefaultConfig() *Config {
 // NewConfigFromENV creates Config from Environmental Variables
 func NewConfigFromENV() (*Config, error) {
 	config := Config{
-		AMQPPort: AMQPPortDefault,
-
+		AMQPPort:  AMQPPortDefault,
 		IRODSPort: IRODSPortDefault,
-
 		VarnishHostsOverride: []string{
 			"",
 		},
 		VarnishURLPrefixes: []string{
 			VarnishURLPrefixDefault,
 		},
+
+		LogPath: LogFilePathDefault,
+
+		Foreground:   false,
+		ChildProcess: false,
 	}
 
 	err := envconfig.Process("", &config)
@@ -85,21 +87,24 @@ func NewConfigFromENV() (*Config, error) {
 // NewConfigFromYAML creates Config from YAML
 func NewConfigFromYAML(yamlBytes []byte) (*Config, error) {
 	config := Config{
-		AMQPPort: AMQPPortDefault,
-
+		AMQPPort:  AMQPPortDefault,
 		IRODSPort: IRODSPortDefault,
-
 		VarnishHostsOverride: []string{
 			"",
 		},
 		VarnishURLPrefixes: []string{
 			VarnishURLPrefixDefault,
 		},
+
+		LogPath: LogFilePathDefault,
+
+		Foreground:   false,
+		ChildProcess: false,
 	}
 
 	err := yaml.Unmarshal(yamlBytes, &config)
 	if err != nil {
-		return nil, fmt.Errorf("YAML Unmarshal Error - %v", err)
+		return nil, fmt.Errorf("failed to unmarshal YAML - %v", err)
 	}
 
 	return &config, nil
