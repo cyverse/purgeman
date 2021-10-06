@@ -3,8 +3,10 @@ package purgeman
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -74,8 +76,10 @@ func (conn *IRODSMessageQueueConnection) MonitorFSChanges(handler FSEventHandler
 
 	if len(conn.Config.Queue) == 0 && len(conn.Config.Exchange) > 0 {
 		// create a queue
-		// auto generate name
-		queue, err := conn.AMQPChannel.QueueDeclare("", false, true, false, false, amqp.Table{})
+		quename := conn.getQueueName()
+		logger.Infof("Declaring a queue %s", quename)
+
+		queue, err := conn.AMQPChannel.QueueDeclare(quename, false, true, false, false, amqp.Table{})
 		if err != nil {
 			logger.WithError(err).Errorf("Could not declare a queue")
 			return err
@@ -192,4 +196,13 @@ func (conn *IRODSMessageQueueConnection) handleFSEvents(msg amqp.Delivery, handl
 	default:
 		return
 	}
+}
+
+func (conn *IRODSMessageQueueConnection) getQueueName() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = fmt.Sprintf("autocreated.%s", xid.New().String())
+	}
+
+	return fmt.Sprintf("purgeman.%s", hostname)
 }
